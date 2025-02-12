@@ -1,6 +1,5 @@
 import music21
 from music21 import stream, midi, scale, converter, instrument
-import copy
 from datetime import datetime as dt
 import numpy as np
 import subprocess 
@@ -13,7 +12,7 @@ class Melody:
     def __init__(self):
         self.tracks = {}
         self.maps = {}
-        self.dynamic = None
+        self.dynamic = self.le
         
         # Additional Instance Attributes
         self.newtracks = {}
@@ -21,7 +20,8 @@ class Melody:
         self.new_stream = None
         self.duration = {}
         self.new_duration = {}
-        self.initial_condition = None
+        self.original_initial_condition = None
+        self.new_initial_condition = None
         self.dynamic_sequence = 0
         self.notetrack = {}
         self.tracks_index = {}
@@ -37,8 +37,8 @@ class Melody:
 
         # etc.
         self.filename = None
-        self.dummy1 = None
-        self.dummy2 = None
+        # self.dummy1 = None
+        # self.dummy2 = None
 
     #####################################################################
     # Main Method
@@ -49,16 +49,17 @@ class Melody:
         midi_file.open(path)
         midi_file.read()
         midi_file.close
+
         self.main_stream = midi.translate.midiFileToStream(midi_file)
         self.new_stream = midi.translate.midiFileToStream(midi_file)
-        self.dummy1 = midi.translate.midiFileToStream(midi_file)
-        self.dummy2 = midi.translate.midiFileToStream(midi_file)
+        # self.dummy1 = midi.translate.midiFileToStream(midi_file)
+        # self.dummy2 = midi.translate.midiFileToStream(midi_file)
         self.filename = str(pathlib.Path(path).stem)
         #return self.tracks
 
-    def fit(self, initial_condition, dynamic, *args, **kwargs):
-        self.dynamic = dynamic
-        self.initial_condition = initial_condition
+    def fit(self, new_initial_condition, original_initial_condition=np.array([1.5, 1.5, 1.5]), *args, **kwargs):
+        self.original_initial_condition = original_initial_condition
+        self.new_initial_condition = new_initial_condition
         self.dynamic_parameter.update(*args, **kwargs)
         
         for index in range(len(self.main_stream)):
@@ -93,7 +94,7 @@ class Melody:
                     for j in range(len(music_list[i])):
                         string_music_list[i][j] = self.note_converter(music_list[i][j])
             
-            time, solution = self.rk4(time=[0, 0.01*(len(music_list) - 1)], f=self.dynamic, ini=[1.5,1.5,1.5], **self.dynamic_parameter)
+            time, solution = self.rk4(time=[0, 0.01*(len(music_list) - 1)], f=self.dynamic, ini=self.original_initial_condition, **self.dynamic_parameter)
             main_sequence = solution[:, self.dynamic_sequence]
             self.original_time = time
             self.original_trajectory = main_sequence
@@ -109,9 +110,12 @@ class Melody:
                 dummy_list.append([self.tracks[key][i], self.notetrack[key][i]])
             self.maps.update({key:dummy_list})
         #return self.maps
-        return self.tracks.keys()
+        # return self.tracks.keys()
+        #return print(self.tracks.keys())
 
-    def variate(self, track, add_note=0, method="classic", criteria="right", divisions=None):
+    def variate(self, track=None, method="classic", criteria="right", divisions=None, add_note=0):
+        if track == None:
+            track = list(self.tracks.keys())
         if add_note != 0:
             for key in track:
                 for each_note in range(add_note):
@@ -137,7 +141,7 @@ class Melody:
                 #print(target_part[-1].show("text"))
                 #print("-"*100)
         
-        if method == "Expand Note":
+        if method == "expand":
             for index in range(len(self.new_stream)):
                 self.expand_note_durations(s=self.new_stream[index], divisions=divisions)
                 instruments = self.new_stream[index][0].getElementsByClass(instrument.Instrument)
@@ -157,11 +161,11 @@ class Melody:
             sorted_tracks = sorted(self.maps[key], key=lambda x: x[0])
             if method == "classic":
                 dummy_list = [None]*(len(self.tracks[key]) + add_note)
-                time, solution = self.rk4(time=[0, 0.01*(len(dummy_list) - 1)], f=self.dynamic, ini=self.initial_condition, **self.dynamic_parameter)
+                time, solution = self.rk4(time=[0, 0.01*(len(dummy_list) - 1)], f=self.dynamic, ini=self.new_initial_condition, **self.dynamic_parameter)
                 main_sequence = solution[:, self.dynamic_sequence]
-            elif method == "Expand Note":
+            elif method == "expand":
                 dummy_list = [None]*(len(self.tracks[key]) + add_note)*divisions
-                time, solution = self.rk4(time=[0, 0.01*(len(dummy_list) - 1)], f=self.dynamic, ini=self.initial_condition, **self.dynamic_parameter)
+                time, solution = self.rk4(time=[0, 0.01*(len(dummy_list) - 1)], f=self.dynamic, ini=self.new_initial_condition, **self.dynamic_parameter)
                 main_sequence = solution[:, self.dynamic_sequence]
                 self.new_time = time
                 self.new_trajectory = main_sequence
@@ -193,7 +197,6 @@ class Melody:
                 raise Exception("Out of Option!")
 
             self.newtracks.update({key:dummy_list})
-            self.dummy2 = self.new_stream
         #return self.newtracks
 
     def export(self, format_type):
@@ -243,8 +246,6 @@ class Melody:
             conv = music21.converter.subConverters.ConverterLilypond()
             original_filepath = filepath + "\\" + self.filename + '_original'
             conv.write(original, fmt='lilypond', fp=original_filepath, subformats = ['pdf'])
-
-            self.main_stream = self.dummy1
             
             new.metadata = music21.metadata.Metadata()
             new.metadata.title = self.filename.replace("_", " ") + " New"
@@ -252,11 +253,15 @@ class Melody:
             new_filepath = filepath + "\\" + self.filename + '_new'
             conv.write(new, fmt='lilypond', fp=new_filepath, subformats = ['pdf'])
 
-            self.new_stream = self.dummy2
-
     #####################################################################
     # Additional Method
     #####################################################################
+
+    def show_all_track(self):
+        return print(self.tracks.keys())
+
+    def set_dynamic(self, dynamic):
+        self.dynamic = dynamic
 
     def set_dynamic_sequence(self, sequence):
         self.dynamic_sequence = sequence
@@ -275,6 +280,15 @@ class Melody:
     #####################################################################
     # Support Method
     #####################################################################
+
+    def le(self, t, xyz, d=10, r=28, b=8/3):
+        x = xyz[0]
+        y = xyz[1]
+        z = xyz[2]
+        xdot = d*(y - x)
+        ydot = x*(r - z) - y
+        zdot = x*y - b*z
+        return np.array([xdot, ydot, zdot])
     
     def rk4(self, time, ini, f, h=0.01, *args, **kwargs):
         t = np.arange(time[0], time[1]+h, h)
