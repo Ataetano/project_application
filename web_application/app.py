@@ -171,17 +171,16 @@ def main():
                 if generate_botton == True:
                     #st.snow()
                     st.session_state['complete_download'] = False
-                    if st.session_state['complete_download'] == False:
-                        st.write("generating...")
 
                     #st.write("Waiting for our algorithm to generate a new variation!")
                     my_melody.set_dynamic_sequence(sequence=st.session_state['sequence_select'])
-                    key_list = my_melody.fit(initial_condition=[st.session_state['x'], st.session_state['y'], st.session_state['z']],
-                                              dynamic=le, d=st.session_state['sigma'], r=st.session_state['rho'], b=st.session_state['beta'])
+                    key_list = my_melody.fit(original_initial_condition=[st.session_state['x'], st.session_state['y'], st.session_state['z']],
+                        method=st.session_state['method'], divisions=st.session_state['option'],
+                        dynamic=le, d=st.session_state['sigma'], r=st.session_state['rho'], b=st.session_state['beta'])
                     if st.session_state['track_list'] == None:
                         st.session_state['track_list'] = [key for key in key_list]
                         st.session_state['backup_track_list'] = [key for key in key_list]
-                    my_melody.variate(track=st.session_state['track_list'], method=st.session_state['method'], divisions=st.session_state['option'])
+                    my_melody.variate(new_initial_condition=[1.5, 1.5, 1.5], track=st.session_state['track_list'])
 
                     original_path, new_path, midi_new_download_path = my_melody.export("midi")
 
@@ -370,7 +369,8 @@ def main():
             if st.session_state['complete_download'] == True:
                 options = st.multiselect(
                     "Select MIDI Tracks",
-                    list(st.session_state['backup_track_list'])
+                    list(st.session_state['backup_track_list']),
+                    default = list(st.session_state['backup_track_list'])
                 )
                 st.write(list(options))
                 #print(list(options))
@@ -379,7 +379,7 @@ def main():
             # Additional Options
             st.session_state['method'] = st.selectbox(
                 "Additional Options",
-                ("Classic", "Expanded Rhythm"),
+                ("Classic", "Expanded"),
                 index=st.session_state['method_index'],
                 placeholder="Choose Equation",
             )
@@ -388,7 +388,7 @@ def main():
                 st.session_state['method_index'] = 0
                 st.session_state['option'] = None
 
-            elif st.session_state['method'] == "Expanded Rhythm":
+            elif st.session_state['method'] == "Expanded":
                 st.session_state['method_index'] = 1
                 st.session_state['option'] = st.selectbox(
                     "Expanded Number (Example: If you choose 4, our algorithm will expand 1 note into 4 notes in your MIDI file)",

@@ -12,6 +12,10 @@ class Melody:
         self.tracks = {}
         self.maps = {}
         self.dynamic = None
+
+        # Main Instance Attributes
+        self.original_midi_data = None
+        self.new_midi_data = None
         
         # Additional Instance Attributes
         self.newtracks = {}
@@ -25,14 +29,20 @@ class Melody:
         self.tracks_index = {}
         self.dynamic_parameter = {}
 
+        # Support Instance Attributes
+        self.method = None
+        self.divisions = None
+        self.backtrack_expand_index = []
+
         # Path
         self.lilypond_path = str(pathlib.Path("__file__").parent.resolve()) + "\\lilypond-2.24.4\\bin\\lilypond.exe"
 
         # etc.
         self.filename = None
-        self.method_name = None
         self.dummy1 = None
         self.dummy2 = None
+        self.dummy3 = None
+        self.dummy4 = None
 
     #####################################################################
     # Main Method
@@ -43,67 +53,150 @@ class Melody:
         midi_file.open(path)
         midi_file.read()
         midi_file.close
+
         self.main_stream = midi.translate.midiFileToStream(midi_file)
         self.new_stream = midi.translate.midiFileToStream(midi_file)
+
+        self.original_midi_data = midi.translate.midiFileToStream(midi_file)
+        self.new_midi_data = midi.translate.midiFileToStream(midi_file)
+
         self.dummy1 = midi.translate.midiFileToStream(midi_file)
         self.dummy2 = midi.translate.midiFileToStream(midi_file)
+        self.dummy3 = midi.translate.midiFileToStream(midi_file)
+        self.dummy4 = midi.translate.midiFileToStream(midi_file)
+
         self.filename = str(pathlib.Path(path).stem)
         #return self.tracks
 
-    def fit(self, initial_condition, dynamic, *args, **kwargs):
-        self.dynamic = dynamic
-        self.initial_condition = initial_condition
+    def fit(self, original_initial_condition, dynamic, method="Classic", divisions=None, *args, **kwargs):
+        self.original_initial_condition = original_initial_condition
         self.dynamic_parameter.update(*args, **kwargs)
-        
-        for index in range(len(self.main_stream)):
-            instruments = self.main_stream[index][0].getElementsByClass(instrument.Instrument)
-            if instruments:
-                instrument_name = str(instruments[0].instrumentName) + "_" + str(index)
-            else:
-                instrument_name = "track_" + str(index)
-            music_list = []
-            duration_list = []
-            for part in self.main_stream[index]:
-                for n in part.flat.notesAndRests:
-                    dur = n.duration.quarterLength
-                    if n.isRest:
-                        note_num = "<REST>"
-                        music_list.append(note_num)
-                        duration_list.append(dur)
-                    else:
-                        if len(n.pitches) == 1:
-                            note_num = n.pitches[0].midi
+        self.dynamic = dynamic
+        self.method = method
+        self.divisions = divisions
+
+        if self.method == "Classic":
+            for index in range(len(self.main_stream)):
+                instruments = self.main_stream[index][0].getElementsByClass(instrument.Instrument)
+                if instruments:
+                    instrument_name = str(instruments[0].instrumentName) + "_" + str(index)
+                else:
+                    instrument_name = "track_" + str(index)
+                music_list = []
+                duration_list = []
+                for part in self.main_stream[index]:
+                    for n in part.flat.notesAndRests:
+                        dur = n.duration.quarterLength
+                        if n.isRest:
+                            note_num = "<REST>"
                             music_list.append(note_num)
                             duration_list.append(dur)
-                        else: 
-                            note_num = sorted(set([p.midi for p in n.pitches]))
-                            music_list.append(list(note_num))
+                        else:
+                            if len(n.pitches) == 1:
+                                note_num = n.pitches[0].midi
+                                music_list.append(note_num)
+                                duration_list.append(dur)
+                            else: 
+                                note_num = sorted(set([p.midi for p in n.pitches]))
+                                music_list.append(list(note_num))
+                                duration_list.append(dur)
+                string_music_list = [element for element in music_list]
+                for i in range(len(music_list)):
+                    try:
+                        string_music_list[i] = self.note_converter(music_list[i])
+                    except TypeError:
+                        for j in range(len(music_list[i])):
+                            string_music_list[i][j] = self.note_converter(music_list[i][j])
+                
+                time, solution = self.rk4(time=[0, 0.01*(len(music_list) - 1)], f=self.dynamic, ini=self.original_initial_condition, **self.dynamic_parameter)
+                main_sequence = solution[:, self.dynamic_sequence]
+                #self.original_time = time
+                # self.original_trajectory = main_sequence
+
+                self.notetrack.update({instrument_name:string_music_list})
+                self.duration.update({instrument_name:duration_list})
+                self.tracks.update({instrument_name:main_sequence})
+                self.tracks_index.update({instrument_name:index})
+            for key in self.tracks.keys():
+                dummy_list = []
+                for i in range(len(self.notetrack[key])):
+                    dummy_list.append([self.tracks[key][i], self.notetrack[key][i]])
+                self.maps.update({key:dummy_list})
+        elif self.method == "Expanded":
+            for index in range(len(self.main_stream)):
+                instruments = self.main_stream[index][0].getElementsByClass(instrument.Instrument)
+                if instruments:
+                    instrument_name = str(instruments[0].instrumentName) + "_" + str(index)
+                else:
+                    instrument_name = "track_" + str(index)
+                duration_list = []
+                for part in self.main_stream[index]:
+                    for n in part.flat.notesAndRests:
+                        dur = n.duration.quarterLength
+                        if n.isRest:
                             duration_list.append(dur)
-            string_music_list = [element for element in music_list]
-            for i in range(len(music_list)):
-                try:
-                    string_music_list[i] = self.note_converter(music_list[i])
-                except TypeError:
-                    for j in range(len(music_list[i])):
-                        string_music_list[i][j] = self.note_converter(music_list[i][j])
-            
-            time, solution = self.rk4(time=[0, 0.01*(len(music_list) - 1)], f=self.dynamic, ini=[1,1,1], **self.dynamic_parameter)
-            main_sequence = solution[:, self.dynamic_sequence]
-            self.notetrack.update({instrument_name:string_music_list})
-            self.duration.update({instrument_name:duration_list})
-            self.tracks.update({instrument_name:main_sequence})
-            self.tracks_index.update({instrument_name:index})
-        for key in self.tracks.keys():
-            dummy_list = []
-            for i in range(len(self.notetrack[key])):
-                dummy_list.append([self.tracks[key][i], self.notetrack[key][i]])
-            self.maps.update({key:dummy_list})
+                        else:
+                            if len(n.pitches) == 1:
+                                duration_list.append(dur)
+                            else:
+                                duration_list.append(dur)
+                self.duration.update({instrument_name:duration_list})
+            for index in range(len(self.main_stream)):
+                self.expand_note_durations(s=self.main_stream[index], divisions=self.divisions)
+                instruments = self.main_stream[index][0].getElementsByClass(instrument.Instrument)
+                if instruments:
+                    instrument_name = str(instruments[0].instrumentName) + "_" + str(index)
+                else:
+                    instrument_name = "track_" + str(index)
+                music_list = []
+                #duration_list = []
+                for part in self.main_stream[index]:
+                    for n in part.flat.notesAndRests:
+                        dur = n.duration.quarterLength
+                        if n.isRest:
+                            note_num = "<REST>"
+                            music_list.append(note_num)
+                            #duration_list.append(dur)
+                        else:
+                            if len(n.pitches) == 1:
+                                note_num = n.pitches[0].midi
+                                music_list.append(note_num)
+                                #duration_list.append(dur)
+                            else: 
+                                note_num = sorted(set([p.midi for p in n.pitches]))
+                                music_list.append(list(note_num))
+                                #duration_list.append(dur)
+                string_music_list = [element for element in music_list]
+                for i in range(len(music_list)):
+                    try:
+                        string_music_list[i] = self.note_converter(music_list[i])
+                    except TypeError:
+                        for j in range(len(music_list[i])):
+                            string_music_list[i][j] = self.note_converter(music_list[i][j])
+                self.backtrack_expand_index = [index for index in range(0, len(music_list) - 1, self.divisions)]
+                time, solution = self.rk4(time=[0, 0.01*(len(music_list) - 1)], f=self.dynamic, ini=self.original_initial_condition, **self.dynamic_parameter)
+                main_sequence = solution[:, self.dynamic_sequence]
+                #self.original_time = time
+                # self.original_trajectory = main_sequence
+
+                self.notetrack.update({instrument_name:string_music_list})
+                self.tracks.update({instrument_name:main_sequence})
+                self.tracks_index.update({instrument_name:index})
+            for key in self.tracks.keys():
+                dummy_list = []
+                for i in range(len(self.notetrack[key])):
+                    dummy_list.append([self.tracks[key][i], self.notetrack[key][i]])
+                self.maps.update({key:dummy_list})
+        else:
+            raise Exception("Out of Option!")
         
         #return self.maps
         return self.tracks.keys()
 
-    def variate(self, track, add_note=0, method="Classic", divisions=None):
-        self.method_name = method
+    def variate(self, new_initial_condition, track=None, criteria="right", add_note=0):
+        self.new_initial_condition = new_initial_condition
+        if track == None:
+            track = list(self.tracks.keys())
         if add_note != 0:
             for key in track:
                 for each_note in range(add_note):
@@ -126,11 +219,12 @@ class Melody:
             
                     # Append the new note to the last measure
                     last_measure.append(new_note)
+                #print(target_part[-1].show("text"))
+                #print("-"*100)
         
-        if method == "Expanded Rhythm":
+        if self.method == "Expanded":
             for index in range(len(self.new_stream)):
-                
-                self.expand_note_durations(s=self.new_stream[index], divisions=divisions)
+                self.expand_note_durations(s=self.new_stream[index], divisions=self.divisions)
                 instruments = self.new_stream[index][0].getElementsByClass(instrument.Instrument)
                 if instruments:
                     instrument_name = str(instruments[0].instrumentName) + "_" + str(index)
@@ -142,77 +236,118 @@ class Melody:
                         dur = n.duration.quarterLength
                         duration_list.append(dur)
                 self.new_duration.update({instrument_name:duration_list})
-            self.duration = self.new_duration
+            #self.duration = self.new_duration
         
         for key in track:
             sorted_tracks = sorted(self.maps[key], key=lambda x: x[0])
-            if method == "Classic":
+            if self.method == "Classic":
                 dummy_list = [None]*(len(self.tracks[key]) + add_note)
-                time, solution = self.rk4(time=[0, 0.01*(len(dummy_list) - 1)], f=self.dynamic, ini=self.initial_condition, **self.dynamic_parameter)
+                time, solution = self.rk4(time=[0, 0.01*(len(dummy_list) - 1)], f=self.dynamic, ini=self.new_initial_condition, **self.dynamic_parameter)
                 main_sequence = solution[:, self.dynamic_sequence]
-            elif method == "Expanded Rhythm":
-                dummy_list = [None]*(len(self.tracks[key]) + add_note)*divisions
-                time, solution = self.rk4(time=[0, 0.01*(len(dummy_list) - 1)], f=self.dynamic, ini=self.initial_condition, **self.dynamic_parameter)
+            elif self.method == "Expanded":
+                dummy_list = [None]*(len(self.tracks[key]) + add_note)*self.divisions
+                time, solution = self.rk4(time=[0, 0.01*(len(dummy_list) - 1)], f=self.dynamic, ini=self.new_initial_condition, **self.dynamic_parameter)
                 main_sequence = solution[:, self.dynamic_sequence]
+                # self.new_time = time
+                # self.new_trajectory = main_sequence
             else:
                 raise Exception("Out of Option!")
-            
-            for i in range(len(main_sequence) if len(main_sequence) == len(sorted_tracks) else len(main_sequence) - 1):
-                for j in range(len(sorted_tracks)):
-                    if main_sequence[i] <= sorted_tracks[j][0]:
-                        dummy_list[i] = sorted_tracks[j][1]
-                        break
-                    elif main_sequence[i] > sorted_tracks[-1][0]:
-                        dummy_list[i] = sorted_tracks[-1][1]
-                        break
+
+            if criteria == "right":
+                for i in range(len(main_sequence) if len(main_sequence) == len(dummy_list) else len(main_sequence) - 1):
+                    for j in range(len(sorted_tracks)):
+                        if main_sequence[i] <= sorted_tracks[j][0]:
+                            dummy_list[i] = sorted_tracks[j][1]
+                            break
+                        elif main_sequence[i] > sorted_tracks[-1][0]:
+                            dummy_list[i] = sorted_tracks[-1][1]
+                            break
+            elif criteria == "left":
+                for i in range(len(main_sequence) if len(main_sequence) == len(dummy_list) else len(main_sequence) - 1):
+                    for j in range(len(sorted_tracks)):
+                        if main_sequence[i] <= sorted_tracks[j][0]:
+                                dummy_list[i] = sorted_tracks[j - 1][1]
+                                break
+                        elif main_sequence[i] > sorted_tracks[-1][0]:
+                            dummy_list[i] = sorted_tracks[-1][1]
+                            break
+                        elif (main_sequence[i] <= sorted_tracks[0][0]) and (j - 1 < 0):
+                            main_sequence[i] = sorted_tracks[0][0]
+                            break
+            else:
+                raise Exception("Out of Option!")
+
             self.newtracks.update({key:dummy_list})
-            self.dummy2 = self.new_stream
-        #return self.newtracks
 
     def export(self, format_type):
         exist_track = [track for track in self.newtracks.keys()]
-        exist_new_stream = self.new_stream
-        for key in self.tracks.keys():
-            if key in exist_track:
-                index = 0
-                for element in exist_new_stream[self.tracks_index[key]].recurse():
-                    if isinstance(element, (music21.note.Note, music21.chord.Chord, music21.note.Rest)):
-                        replacement = self.newtracks[key][index]
-                        duration_value = self.duration[key][index]
-                        if replacement == '<REST>':
-                            new_element = music21.note.Rest()
-                        elif isinstance(replacement, list):
-                            new_element = music21.chord.Chord(replacement)
-                        else:
-                            new_element = music21.note.Note(replacement)
-                        new_element.duration = music21.duration.Duration(duration_value)
-                        element.activeSite.replace(element, new_element)
-                        if index < len(self.newtracks[key]) - 1:
-                            index += 1
-                        else:
-                            break
+        exist_new_stream = self.new_midi_data
+        if self.method == "Classic":
+            for key in self.tracks.keys():
+                if key in exist_track:
+                    index = 0
+                    for element in exist_new_stream[self.tracks_index[key]].recurse():
+                        if isinstance(element, (music21.note.Note, music21.chord.Chord, music21.note.Rest)):
+                            replacement = self.newtracks[key][index]
+                            duration_value = self.duration[key][index]
+                            if replacement == '<REST>':
+                                new_element = music21.note.Rest()
+                            elif isinstance(replacement, list):
+                                new_element = music21.chord.Chord(replacement)
+                            else:
+                                new_element = music21.note.Note(replacement)
+                            new_element.duration = music21.duration.Duration(duration_value)
+                            element.activeSite.replace(element, new_element)
+                            print(f"{element} --> {replacement}")
+                            if index < len(self.newtracks[key]) - 1:
+                                index += 1
+                            else:
+                                break
+        elif self.method == "Expanded":
+            for key in self.tracks.keys():
+                if key in exist_track:
+                    index = 0
+                    for element in exist_new_stream[self.tracks_index[key]].recurse():
+                        if isinstance(element, (music21.note.Note, music21.chord.Chord, music21.note.Rest)):
+                            replacement = self.newtracks[key][self.backtrack_expand_index[index]]
+                            duration_value = self.duration[key][index]
+                            if replacement == '<REST>':
+                                new_element = music21.note.Rest()
+                            elif isinstance(replacement, list):
+                                new_element = music21.chord.Chord(replacement)
+                            else:
+                                new_element = music21.note.Note(replacement)
+                            new_element.duration = music21.duration.Duration(duration_value)
+                            element.activeSite.replace(element, new_element)
+                            #print(f"{element} --> {replacement}")
+                            if index < len(self.newtracks[key]) - 1:
+                                index += 1
+                            else:
+                                break
+        else:
+            raise Exception("Out of Option!")
         current_path = pathlib.Path("__file__").parent.resolve()
         date = str(dt.now().isoformat())[:-7]
-        filepath = str(current_path) + "\\" + "static" + "\\" + "file_store" + "\\" + self.filename #+ date.replace(":", "-")
+        filepath = str(current_path) + "\\" + "static" + "\\" + "file_store" + "\\" + self.filename + date.replace(":", "-")
         isExist = os.path.exists(filepath)
         if not isExist:
             os.makedirs(filepath)
-        original = self.main_stream
-        new = self.new_stream
-        streamlit_accept_path = "app" + "/" + "static" + "/" + "file_store" + "/" + self.filename #+ date.replace(":", "-")
+        original = self.original_midi_data
+        new = self.new_midi_data
+        streamlit_accept_path = "app" + "/" + "static" + "/" + "file_store" + "/" + self.filename + date.replace(":", "-")
         if format_type == "midi":
             # original.metadata = music21.metadata.Metadata()
             original.write('midi', filepath + "\\" + self.filename + '_original.mid')
             original_path = streamlit_accept_path + "/" + self.filename + '_original.mid'
             # new.metadata = music21.metadata.Metadata()
-            if self.method_name == "Classic":
+            if self.method == "Classic":
                 new.write('midi', filepath + "\\" + self.filename + '_new.mid')
                 new_path = streamlit_accept_path + "/" + self.filename + '_new.mid'
                 midi_new_download_path = filepath + "\\" + self.filename + '_new.mid'
-            elif self.method_name == "Expanded Rhythm":
+            elif self.method == "Expanded":
                 new.write('midi', filepath + "\\" + self.filename + '_new_expanded.mid')
                 new_path = streamlit_accept_path + "/" + self.filename + '_new_expanded.mid'
-                midi_new_download_path = filepath + "\\" + self.filename + '_new.mid'
+                midi_new_download_path = filepath + "\\" + self.filename + '_new_expanded.mid'
             return original_path , new_path, midi_new_download_path
         elif format_type == "pdf":
             us = music21.environment.UserSettings()
@@ -226,6 +361,7 @@ class Melody:
             conv.write(original, fmt='lilypond', fp=original_filepath, subformats = ['pdf'])
 
             self.main_stream = self.dummy1
+            self.original_midi_data = self.dummy2
             
             new_path = filepath + "\\" + self.filename + '_new.pdf'
             new.metadata = music21.metadata.Metadata()
@@ -234,7 +370,8 @@ class Melody:
             new_filepath = filepath + "\\" + self.filename + '_new'
             conv.write(new, fmt='lilypond', fp=new_filepath, subformats = ['pdf'])
 
-            self.new_stream = self.dummy2
+            self.new_stream = self.dummy3
+            self.new_midi_data = self.dummy4
             return original_path , new_path
 
     #####################################################################
