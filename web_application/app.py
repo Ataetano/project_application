@@ -3,6 +3,7 @@ import os
 from melody_api import Melody
 from dynamic_system.dynamic_system import *
 import streamlit.components.v1 as components
+import pathlib
 
 
 def main():
@@ -84,6 +85,9 @@ def main():
 
     # MIDI file count variable
     file_count = 0
+
+    # Current Path
+    current_path = pathlib.Path("__file__").parent.resolve()
 
     # Left Column: Generate Music Button and File Upload
     with left_col:
@@ -172,7 +176,7 @@ def main():
                 st.session_state['generate_clicked'] = True
 
             if st.session_state['generate_clicked'] == False:
-                st.image("intro.jpg")
+                st.image(str(current_path) + "/" +"intro.jpg")
                 st.write("Start creating your variation by simply uploading a MIDI file and clicking \"Variate Music!\"")
 
             if 'uploaded_file' in st.session_state and st.session_state['uploaded_file'] is not None:
