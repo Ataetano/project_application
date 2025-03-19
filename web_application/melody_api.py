@@ -320,7 +320,7 @@ class Melody:
                             new_element.duration = music21.duration.Duration(duration_value)
                             element.activeSite.replace(element, new_element)
                             #print(f"{element} --> {replacement}")
-                            if index < len(self.newtracks[key]) - 1:
+                            if index < len(self.backtrack_expand_index) - 1:
                                 index += 1
                             else:
                                 break

@@ -106,7 +106,16 @@ class Melody:
                 
                 time, solution = self.rk4(time=[0, 0.01*(len(music_list) - 1)], f=self.dynamic, ini=self.original_initial_condition, **self.dynamic_parameter)
                 main_sequence = solution[:, self.dynamic_sequence]
-                print(main_sequence[0:100:5])
+                
+                print(solution[0:110:5, 0])
+                print("-"*50)
+                print("-"*50)
+                print(solution[0:110:5, 1])
+                print("-"*50)
+                print("-"*50)
+                print(solution[0:110:5, 2])
+                print("*"*50)
+                print("*"*50)
                 #self.original_time = time
                 # self.original_trajectory = main_sequence
 
@@ -241,6 +250,16 @@ class Melody:
                 dummy_list = [None]*(len(self.tracks[key]) + add_note)
                 time, solution = self.rk4(time=[0, 0.01*(len(dummy_list) - 1)], f=self.dynamic, ini=self.new_initial_condition, **self.dynamic_parameter)
                 main_sequence = solution[:, self.dynamic_sequence]
+                
+                print(solution[0:110:5, 0])
+                print("-"*50)
+                print("-"*50)
+                print(solution[0:110:5, 1])
+                print("-"*50)
+                print("-"*50)
+                print(solution[0:110:5, 2])
+                print("*"*50)
+                print("*"*50)
             elif self.method == "expand":
                 dummy_list = [None]*(len(self.tracks[key]) + add_note)*self.divisions
                 time, solution = self.rk4(time=[0, 0.01*(len(dummy_list) - 1)], f=self.dynamic, ini=self.new_initial_condition, **self.dynamic_parameter)

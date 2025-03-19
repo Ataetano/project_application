@@ -1,12 +1,8 @@
 import streamlit as st
-from datetime import datetime as dt
-from io import BytesIO
 import os
-import mido
 from melody_api import Melody
 from dynamic_system.dynamic_system import *
 import streamlit.components.v1 as components
-import time
 
 
 def main():
@@ -75,6 +71,8 @@ def main():
         st.session_state['backup_track_list'] = None
     if 'under_process' not in st.session_state:
         st.session_state['under_process'] = None
+    if 'file_exist' not in st.session_state:
+        st.session_state['file_exist'] = 0
 
     st.set_page_config(layout="wide")
 
@@ -84,11 +82,14 @@ def main():
     # Page layout
     left_col, right_col = st.columns([1, 3])
 
+    # MIDI file count variable
+    file_count = 0
+
     # Left Column: Generate Music Button and File Upload
     with left_col:
 
         st.markdown(
-            '<h1 style="font-size:30px;">Generate Music</h1>', 
+            '<h1 style="font-size:30px;">Variate Music</h1>', 
             unsafe_allow_html=True
         )
 
@@ -115,13 +116,20 @@ def main():
         st.markdown(css, unsafe_allow_html=True)
 
         # Only update session state if a new file is uploaded
+
         if uploaded_file is not None:
+            if st.session_state['file_exist'] == 1:
+                print(f"now_file = {uploaded_file.name}")
+                print(f"exist_file = {st.session_state['uploaded_file'].name}")
+                if (uploaded_file.name != st.session_state['uploaded_file'].name):
+                    st.session_state['track_list'] = None
+                    st.session_state['backup_track_list'] = None
             st.session_state['uploaded_file'] = uploaded_file
+            st.session_state['file_exist'] = 1
 
         if 'uploaded_file' in st.session_state and st.session_state['uploaded_file'] is not None:
             st.write("Uploaded file:", st.session_state['uploaded_file'].name)
 
-            date = str(dt.now().isoformat())[:-7]
             save_directory = os.path.join("static", "midi_file")
             os.makedirs(save_directory, exist_ok=True)
 
@@ -152,7 +160,7 @@ def main():
                     my_melody.load(path=st.session_state['save_path'])
                 except Exception as e:
                     st.error(f"Failed to read MIDI file: {e}")
-        generate_botton = st.button('Generate Music')
+        generate_botton = st.button('Variate')
 
     # Right Column: Tabs for Results and Settings
     with right_col:
@@ -165,7 +173,7 @@ def main():
 
             if st.session_state['generate_clicked'] == False:
                 st.image("intro.jpg")
-                st.write("Start creating your variation by simply uploading a MIDI file and clicking \"Generate Music!\"")
+                st.write("Start creating your variation by simply uploading a MIDI file and clicking \"Variate Music!\"")
 
             if 'uploaded_file' in st.session_state and st.session_state['uploaded_file'] is not None:
                 if generate_botton == True:
@@ -362,11 +370,11 @@ def main():
                     if str(checker) == 'True':
                         st.write(f"Chaotic parameter")
                     else:
-                        st.warning('Parameter not chaotic', icon="⚠️")
+                        st.warning('Parameter not chaotic')
 
             elif equation == "Chaotic system":
                 st.write("Soon...")
-            if st.session_state['complete_download'] == True:
+            if (st.session_state['complete_download'] == True) and (st.session_state['backup_track_list'] != None):
                 options = st.multiselect(
                     "Select MIDI Tracks",
                     list(st.session_state['backup_track_list']),
