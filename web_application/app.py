@@ -123,8 +123,6 @@ def main():
 
         if uploaded_file is not None:
             if st.session_state['file_exist'] == 1:
-                print(f"now_file = {uploaded_file.name}")
-                print(f"exist_file = {st.session_state['uploaded_file'].name}")
                 if (uploaded_file.name != st.session_state['uploaded_file'].name):
                     st.session_state['track_list'] = None
                     st.session_state['backup_track_list'] = None
